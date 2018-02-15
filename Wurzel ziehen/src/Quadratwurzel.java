@@ -1,4 +1,9 @@
 
+/**
+ * 
+ * @author jonasklein
+ *
+ */
 public class Quadratwurzel {
 
 	public static void main (String[]args) {
