@@ -21,8 +21,15 @@ public class CapDB {
 			"CREATE TABLE orders(\n" + "	oid int NOT NULL AUTO_INCREMENT,\n" + "	month varchar(10) NOT NULL,\n"
 					+ "	cid int NOT NULL REFERENCES customers(cid),\n"
 					+ "	pid int NOT NULL REFERENCES products(pid),\n" + "	aid int NOT NULL REFERENCES agents(aid),\n"
-					+ "	qty bigint NOT NULL,\n" + "	dollars decimal(10,2) NOT NULL,\n" + "	PRIMARY KEY (oid)\n"
-					+ ");" };
+					+ "	qty bigint NOT NULL,\n" + "	dollars decimal(10,2),\n" + "	PRIMARY KEY (oid)\n" + ");",
+			// "DROP TRIGGER IF EXISTS dollarCalc;",
+			// "delimiter //" + "CREATE TRIGGER dollarCalc BEFORE INSERT ON orders FOR EACH
+			// ROW\n" + "BEGIN\n"
+			// + " IF NEW.dollars = null\n" + " THEN\n"
+			// + " SET NEW.dollars = ((SELECT p.price FROM products p WHERE
+			// p.pid=NEW.pid)*NEW.qty);\n"
+			// + " END IF;\n" + "END; //\n" + "delimiter ;"
+	};
 
 	// Pro Statement eine Connection: 348723
 	// Nur eine Connection: 114953
@@ -34,9 +41,9 @@ public class CapDB {
 		CapDB db = new CapDB();
 		start = System.currentTimeMillis();
 		db.resetTables();
-		db.fill(1000, 100000, 10000);
+		db.fill(1000, 100000, 10000, 10000000);
 		ende = System.currentTimeMillis();
-		System.out.println("Dauer: " + (ende - start));
+		System.out.println("Dauer: " + ((ende - start) / 1000) / 60 + " Minuten.");
 	}
 
 	private void resetTables() {
@@ -62,27 +69,29 @@ public class CapDB {
 		}
 	}
 
-	private void fill(int agenten, int kunden, int produkte) {
-		Agent[] ag = getAgenten(agenten);
-		Customer[] cm = getCustomers(kunden);
-		Product[] pr = getProducts(produkte);
+	private void fill(int agenten, int kunden, int produkte, int bestellungen) {
 
 		try (Connection conn = DriverManager.getConnection(connStr, user, password);
 				PreparedStatement ps = conn
 						.prepareStatement("INSERT INTO agents (aname, city, percent) VALUES (?, ?, ?);")) {
 
 			conn.setAutoCommit(false);
-
-			for (Agent a : ag) {
-				ps.clearParameters();
+			Agent a;
+			for (int i = 0; i < agenten; i++) {
+				a = new Agent();
 				ps.setString(1, a.getName());
 				ps.setString(2, a.getCity());
 				ps.setDouble(3, a.getProzent());
 				ps.addBatch();
+
+				if (i % 100000 == 0 || i == (agenten - 1)) {
+					ps.executeBatch();
+					ps.clearBatch();
+				}
 			}
 
-			ps.executeLargeBatch();
-
+			ps.executeBatch();
+			conn.commit();
 		} catch (SQLException e) {
 			System.err.println(e);
 		}
@@ -92,17 +101,22 @@ public class CapDB {
 						.prepareStatement("INSERT INTO customers (cname, city, discnt) VALUES (?, ?, ?);")) {
 
 			conn.setAutoCommit(false);
-
-			for (Customer c : cm) {
-				ps.clearParameters();
+			Customer c;
+			for (int i = 0; i < kunden; i++) {
+				c = new Customer();
 				ps.setString(1, c.getName());
 				ps.setString(2, c.getCity());
 				ps.setDouble(3, c.getDsc());
 				ps.addBatch();
+
+				if (i % 100000 == 0 || i == (kunden - 1)) {
+					ps.executeBatch();
+					ps.clearBatch();
+				}
 			}
 
-			ps.executeLargeBatch();
-
+			ps.executeBatch();
+			conn.commit();
 		} catch (SQLException e) {
 			System.err.println(e);
 		}
@@ -112,45 +126,52 @@ public class CapDB {
 						.prepareStatement("INSERT INTO products (pname, city, quantity, price) VALUES (?, ?, ?, ?);")) {
 
 			conn.setAutoCommit(false);
-
-			for (Product p : pr) {
-				ps.clearParameters();
+			Product p;
+			for (int i = 0; i < produkte; i++) {
+				p = new Product();
 				ps.setString(1, p.getName());
 				ps.setString(2, p.getCity());
 				ps.setDouble(3, p.getQuantity());
 				ps.setDouble(4, p.getPrice());
 				ps.addBatch();
+
+				if (i % 100000 == 0 || i == (produkte - 1)) {
+					ps.executeBatch();
+					ps.clearBatch();
+				}
 			}
-
-			ps.executeLargeBatch();
-
+			ps.executeBatch();
+			conn.commit();
 		} catch (SQLException e) {
 			System.err.println(e);
 		}
 
-	}
+		try (Connection conn = DriverManager.getConnection(connStr, user, password);
+				PreparedStatement ps = conn
+						.prepareStatement("INSERT INTO orders (month, cid, pid, aid, qty) VALUES (?, ?, ?, ?, ?);")) {
 
-	private Agent[] getAgenten(int anz) {
-		Agent[] agenten = new Agent[anz];
-		for (int i = 0; i < anz; i++) {
-			agenten[i] = new Agent();
-		}
-		return agenten;
-	}
+			conn.setAutoCommit(false);
+			Order o;
+			for (int i = 0; i < bestellungen; i++) {
+				o = new Order(kunden, produkte, agenten);
+				ps.setString(1, o.getMonth());
+				ps.setInt(2, o.getCid());
+				ps.setInt(3, o.getPid());
+				ps.setInt(4, o.getAid());
+				ps.setInt(5, o.getQty());
+				ps.addBatch();
 
-	private Customer[] getCustomers(int anz) {
-		Customer[] customers = new Customer[anz];
-		for (int i = 0; i < anz; i++) {
-			customers[i] = new Customer();
-		}
-		return customers;
-	}
+				if (i % 100000 == 0 || i == (bestellungen - 1)) {
+					ps.executeBatch();
+					ps.clearBatch();
+				}
+			}
 
-	private Product[] getProducts(int anz) {
-		Product[] products = new Product[anz];
-		for (int i = 0; i < anz; i++) {
-			products[i] = new Product();
+			ps.executeBatch();
+			conn.commit();
+		} catch (SQLException e) {
+			System.err.println(e);
 		}
-		return products;
+
 	}
 }
