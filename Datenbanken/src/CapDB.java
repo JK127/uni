@@ -1,6 +1,7 @@
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class CapDB {
@@ -34,16 +35,41 @@ public class CapDB {
 	// Pro Statement eine Connection: 348723
 	// Nur eine Connection: 114953
 	// Mit Batch: 15463
+
+	// Prepared Statement 668
+	// Statement 694
 	public static void main(String[] args) {
 		long start;
 		long ende;
 
 		CapDB db = new CapDB();
 		start = System.currentTimeMillis();
-		db.resetTables();
-		db.fill(1000, 100000, 10000, 10000000);
+		// db.resetTables();
+		// db.fill(1000, 100000, 10000, 10000000);
+		// db.querywPs();
+		db.query();
 		ende = System.currentTimeMillis();
-		System.out.println("Dauer: " + ((ende - start) / 1000) / 60 + " Minuten.");
+		System.out.println("Dauer: " + ((ende - start) / 1000) / 60 + " Minuten, (" + (ende - start) + "ms)");
+	}
+
+	private String test = "SELECT distinct a.aname, b.aname, a.city FROM agents a, agents b WHERE a.city=b.city AND a.aid <> b.aid AND a.aname <= b.aname;";
+
+	private void querywPs() {
+		try (Connection conn = DriverManager.getConnection(connStr, user, password);
+				PreparedStatement ps = conn.prepareStatement(test)) {
+			ResultSet rs = ps.executeQuery();
+		} catch (SQLException e) {
+
+		}
+	}
+
+	private void query() {
+		try (Connection conn = DriverManager.getConnection(connStr, user, password);
+				java.sql.Statement ps = conn.createStatement()) {
+			ResultSet rs = ps.executeQuery(test);
+		} catch (SQLException e) {
+
+		}
 	}
 
 	private void resetTables() {
